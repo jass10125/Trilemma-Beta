@@ -1,0 +1,64 @@
+# Necessary imports
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from datetime import datetime
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import train_test_split
+import warnings
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
+
+# Suppress warnings to keep the output clean
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+#------------------------------------------------------#
+
+# Download Bitcoin price data from Yahoo Finance (data available as far back as 2014-09-16)
+btc_df = yf.download('BTC-USD', start='2014-09-22', end=datetime.now(), interval='1wk')
+btc_df["7_Day_ROI"] = ((btc_df["Close"]-btc_df["Open"])/btc_df["Close"])*100
+#btc_weekly_df.dropna(inplace=True)
+
+#----------------------------------------------#
+
+from sklearn.ensemble import RandomForestRegressor
+#MY VERSION
+X = btc_df.drop(['7_Day_ROI'], axis=1)
+y = btc_df['7_Day_ROI']
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
+
+rf = RandomForestRegressor(random_state=42, n_estimators=100)
+rf.fit(X_train, y_train)
+y_pred = rf.predict(X_train)
+y_pred1 = rf.predict(X_test)
+r1 = round(mean_absolute_error(y_train, y_pred),5)
+r2 = round(mean_absolute_error(y_test, y_pred1),5)
+print("MAE of Random Forest Regressor on training set: {:.3f}".format(r1))
+print("MAE of Random Forest Regressor on test set: {:.3f}".format(r2))
+
+#-------------------------------------#
+
+# Get the last row of the data as the input for forecasting
+last_row = btc_df.iloc[-1:]
+
+# Create a new dataframe with the last row repeated 1 time (for 1 week forecast)
+forecast_input = pd.DataFrame(np.repeat(last_row.values, 1, axis=0), columns=btc_df.columns)
+
+# Drop the 7_Day_ROI column from the forecast_input dataframe
+forecast_input = forecast_input.drop(['7_Day_ROI'], axis=1)
+
+# Forecast the 7-Day ROI for the next week
+forecasted_roi = rf.predict(forecast_input)
+
+# Calculate the forecasted price of BTC-USD for the next week
+forecasted_price = forecast_input['Close'].values[0] * (1 + forecasted_roi[0] / 100)
+
+print("Forecasted price of BTC-USD for 1 week from now: ${:.2f}".format(forecasted_price))
+print("Predicted ROI on 15th July 2024:", forecasted_roi[0])
+
+#-------------------------------------#
